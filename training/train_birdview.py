@@ -10,7 +10,7 @@ import tqdm
 import glob
 import os
 import sys
-
+import pdb
 try:
     sys.path.append(glob.glob('../PythonAPI')[0])
     sys.path.append(glob.glob('../bird_view')[0])
@@ -106,20 +106,24 @@ def train_or_eval(criterion, net, data, optim, is_train, config, is_first_epoch)
     else:
         desc = 'Val'
         net.eval()
-    print(data)
-    total = 10 if is_first_epoch else len(data)
-    iterator_tqdm = tqdm.tqdm(data, desc=desc, total=total)
-    iterator = enumerate(iterator_tqdm)
+    # total = 10 if is_first_epoch else len(data)
+    total = len(data)
+    print(len(data))
+    # iterator_tqdm = tqdm.tqdm(data, desc=desc, total=total)
+    # iterator = enumerate(iterator_tqdm)
 
     tick = time.time()
-    enumerate_list = list(iterator)
-    print(enumerate_list[0])
-    for i, (birdview, location, command, speed) in iterator:
+    # enumerate_list = list(iterator)
+    # print(len(enumerate_list))
+    for i, (birdview, location, command, speed) in enumerate(data):
+        
         birdview = birdview.to(config['device'])
+        print(birdview.shape)
         command = one_hot(command).to(config['device'])
         speed = speed.to(config['device'])
+        print("trwaetr")
         location = location.float().to(config['device'])
-
+        
         pred_location = net(birdview, speed, command)
         loss = criterion(pred_location, location)
         loss_mean = loss.mean()
@@ -148,10 +152,10 @@ def train_or_eval(criterion, net, data, optim, is_train, config, is_first_epoch)
         bzu.log.scalar(is_train=is_train, fps=1.0/(time.time() - tick))
 
         tick = time.time()
-
-        if is_first_epoch and i == 10:
-            iterator_tqdm.close()
-            break
+        torch.cuda.empty_cache()
+        # if is_first_epoch and i == 10:
+        #     iterator_tqdm.close()
+        #     break
 
 
 def train(config):
@@ -161,13 +165,14 @@ def train(config):
     data_train, data_val = load_data(**config['data_args'])
     criterion = LocationLoss(w=192, h=192, choice='l1')
     net = BirdViewPolicyModelSS(config['model_args']['backbone']).to(config['device'])
-    
     if config['resume']:
         log_dir = Path(config['log_dir'])
         checkpoints = list(log_dir.glob('model-*.th'))
         checkpoint = str(checkpoints[-1])
         print ("load %s"%checkpoint)
         net.load_state_dict(torch.load(checkpoint))
+
+    print(f"Net Device: {next(net.parameters()).device}")
     
     optim = torch.optim.Adam(net.parameters(), lr=config['optimizer_args']['lr'])
 
@@ -177,6 +182,7 @@ def train(config):
         print("* 2 *")
         train_or_eval(criterion, net, data_val, None, False, config, epoch == 0)
 
+        print("out")
         if epoch in SAVE_EPOCHS:
             torch.save(
                     net.state_dict(),
@@ -189,7 +195,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--log_dir', required=True)
     parser.add_argument('--log_iterations', default=1000)
-    parser.add_argument('--max_epoch', default=1000)
+    parser.add_argument('--max_epoch', default=10)
 
     # Dataset.
     parser.add_argument('--dataset_dir', default='/raid0/dian/carla_0.9.6_data')
